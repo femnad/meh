@@ -1,5 +1,7 @@
 extern crate clap;
+extern crate dirs;
 extern crate reqwest;
+extern crate serde;
 
 use std::process::Command;
 use std::io::prelude::*;
@@ -7,6 +9,10 @@ use std::fs::File;
 
 use clap::{App, Arg, SubCommand, AppSettings};
 use serde_json::json;
+use serde::{Serialize, Deserialize};
+
+const DEFAULT_PROFILE: &str = "default";
+const PROFILE_FILE_SUFFIX: &str = "meh/meh.yaml";
 
 struct Page {
     title: String,
@@ -19,6 +25,27 @@ struct Credentials {
     username: String,
     password: String,
     endpoint: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Profile {
+    name: String,
+    username: String,
+    pass_secret: String,
+    endpoint: String,
+    space: String,
+}
+
+fn get_profile(profile_name: &str) -> Profile {
+    let mut config_file = dirs::config_dir().expect("Unable to get config dir");
+    config_file.push(PROFILE_FILE_SUFFIX);
+    let mut file = File::open(config_file).expect("Unable to open config file");
+    let mut profiles = String::new();
+    file.read_to_string(&mut profiles).expect("Error reading config file");
+    let profiles: Vec<Profile> = serde_yaml::from_str(&profiles).expect("Unable to deserialize config");
+    profiles.into_iter()
+        .find(|profile| { profile.name == profile_name })
+        .expect("Cannot find desired profile")
 }
 
 fn get_content(page: Page) -> String {
@@ -80,24 +107,12 @@ fn main() {
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommand(SubCommand::with_name("create")
             .about("create a page")
-            .arg(Arg::with_name("secret")
-                .short("s")
-                .long("secret")
-                .help("a pass secret containing API password")
-                .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("username")
-                .short("u")
-                .long("username")
-                .help("username for the API")
-                .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("space")
+            .arg(Arg::with_name("profile")
                 .short("p")
-                .long("space")
-                .help("Confluence space")
+                .long("profile")
+                .help("a profile name")
                 .takes_value(true)
-                .required(true))
+                .default_value(&DEFAULT_PROFILE))
             .arg(Arg::with_name("title")
                 .short("t")
                 .long("title")
@@ -108,34 +123,16 @@ fn main() {
                 .short("f")
                 .long("source")
                 .help("source file for the page")
-                .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("endpoint")
-                .short("e")
-                .long("endpoint")
-                .help("endpoint for Confluence API")
                 .takes_value(true)
                 .required(true)))
         .subcommand(SubCommand::with_name("update")
             .about("update a page")
-            .arg(Arg::with_name("secret")
-                .short("s")
-                .long("secret")
-                .help("a pass secret containing API password")
-                .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("username")
-                .short("u")
-                .long("username")
-                .help("username for the API")
-                .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("space")
+            .arg(Arg::with_name("profile")
                 .short("p")
-                .long("space")
-                .help("Confluence space")
+                .long("profile")
+                .help("a profile name")
                 .takes_value(true)
-                .required(true))
+                .default_value(&DEFAULT_PROFILE))
             .arg(Arg::with_name("title")
                 .short("t")
                 .long("title")
@@ -146,12 +143,6 @@ fn main() {
                 .short("f")
                 .long("source")
                 .help("source file for the page")
-                .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("endpoint")
-                .short("e")
-                .long("endpoint")
-                .help("endpoint for Confluence API")
                 .takes_value(true)
                 .required(true))
             .arg(Arg::with_name("id")
@@ -169,34 +160,35 @@ fn main() {
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("create") {
-        let pass_secret = matches.value_of("secret").unwrap();
-        let space = matches.value_of("space").unwrap();
         let title = matches.value_of("title").unwrap();
         let source = matches.value_of("source").unwrap();
-        let username = matches.value_of("username").unwrap();
-        let endpoint = matches.value_of("endpoint").unwrap();
 
-        let password = get_password(pass_secret.to_string());
-        let credentials = Credentials{username: username.to_string(), password: password, endpoint: endpoint.to_string()};
-        let page = Page{title: title.to_string(), space: space.to_string(), source_file: source.to_string(), version: 1};
+        let profile_name = matches.value_of("profile").unwrap();
+        let profile = get_profile(profile_name);
+
+        let password = get_password(profile.pass_secret.to_string());
+        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: 1};
         let content = get_content(page);
+
         let mut response = create(credentials, content);
         println!("{}", response.text().expect("response text fail"));
         println!("{}", response.status());
     } else if let Some(matches) = matches.subcommand_matches("update") {
-        let pass_secret = matches.value_of("secret").unwrap();
-        let space = matches.value_of("space").unwrap();
         let title = matches.value_of("title").unwrap();
         let source = matches.value_of("source").unwrap();
-        let username = matches.value_of("username").unwrap();
-        let endpoint = matches.value_of("endpoint").unwrap();
+
+        let profile_name = matches.value_of("profile").unwrap();
+        let profile = get_profile(profile_name);
+
         let version: u32 = matches.value_of("version").unwrap().parse().expect("failed parsing int");
         let id: u64 = matches.value_of("id").unwrap().parse().expect("failed parsing int");
 
-        let password = get_password(pass_secret.to_string());
-        let credentials = Credentials{username: username.to_string(), password: password, endpoint: endpoint.to_string()};
-        let page = Page{title: title.to_string(), space: space.to_string(), source_file: source.to_string(), version: version};
+        let password = get_password(profile.pass_secret.to_string());
+        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: version};
         let content = get_content(page);
+
         let mut response = update(credentials, content, id);
         println!("{}", response.text().expect("response text fail"));
         println!("{}", response.status());
