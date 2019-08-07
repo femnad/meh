@@ -1,0 +1,5 @@
+- name: <profile-name>
+  username: <username>
+  pass_secret: <pass-secret>
+  endpoint: <endpoint>
+  space: <space>

@@ -9,7 +9,7 @@ use std::fs::File;
 
 use clap::{App, Arg, SubCommand, AppSettings};
 use serde_json::json;
-use serde::{Serialize, Deserialize};
+use serde::Deserialize;
 
 const DEFAULT_PROFILE: &str = "default";
 const PROFILE_FILE_SUFFIX: &str = "meh/meh.yaml";
@@ -27,13 +27,24 @@ struct Credentials {
     endpoint: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 struct Profile {
     name: String,
     username: String,
     pass_secret: String,
     endpoint: String,
     space: String,
+}
+
+#[derive(Deserialize, Clone)]
+struct ConfluencePage {
+    id: String,
+    title: String,
+}
+
+#[derive(Deserialize)]
+struct SearchResults {
+    results: Vec<ConfluencePage>
 }
 
 fn get_profile(profile_name: &str) -> Profile {
@@ -81,25 +92,42 @@ fn get_password(secret_name: String) -> String {
     v[0].to_string()
 }
 
-fn create(credentials: Credentials, content: String) -> reqwest::Response {
+fn get_endpoint(credentials: &Credentials) -> String {
+    format!("{}/{}", credentials.endpoint, "confluence/rest/api/content")
+}
+
+fn create(credentials: &Credentials, content: String) -> reqwest::Response {
     let client = reqwest::Client::new();
-    client.post(credentials.endpoint.as_str())
-        .basic_auth(credentials.username, Some(credentials.password))
+    client.post(get_endpoint(credentials).as_str())
+        .basic_auth(&credentials.username, Some(&credentials.password))
         .body(content)
         .header("Content-Type", "application/json")
         .send()
         .expect("post fail")
 }
 
-fn update(credentials: Credentials, content: String, id: u64) -> reqwest::Response {
-    let endpoint = format!("{}/{}", credentials.endpoint, id);
+fn update(credentials: &Credentials, content: String, id: u64) -> reqwest::Response {
+    let endpoint = format!("{}/{}", get_endpoint(credentials), id);
     let client = reqwest::Client::new();
     client.put(endpoint.as_str())
-        .basic_auth(credentials.username, Some(credentials.password))
+        .basic_auth(&credentials.username, Some(&credentials.password))
         .body(content)
         .header("Content-Type", "application/json")
         .send()
         .expect("post fail")
+}
+
+fn search(credentials: &Credentials, space: String, title: String) -> ConfluencePage {
+    let endpoint = format!("{endpoint}?spaceKey={space}&title={title}", endpoint=get_endpoint(credentials),
+        space=space, title=title);
+    let client = reqwest::Client::new();
+    let mut response = client.get(endpoint.as_str())
+        .basic_auth(&credentials.username, Some(&credentials.password))
+        .send()
+        .expect("search by title and space fail");
+    let search_results: SearchResults = response.json().expect("cannot extract JSON");
+    let first_result = &search_results.results[0];
+    first_result.clone()
 }
 
 fn main() {
@@ -157,6 +185,20 @@ fn main() {
                 .help("version to set for the updated page")
                 .takes_value(true)
                 .required(true)))
+        .subcommand(SubCommand::with_name("search")
+            .about("search for a page")
+            .arg(Arg::with_name("profile")
+                .short("p")
+                .long("profile")
+                .help("a profile name")
+                .takes_value(true)
+                .default_value(&DEFAULT_PROFILE))
+            .arg(Arg::with_name("title")
+                .short("t")
+                .long("title")
+                .help("title for the page to create")
+                .takes_value(true)
+                .required(true)))
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("create") {
@@ -171,7 +213,7 @@ fn main() {
         let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: 1};
         let content = get_content(page);
 
-        let mut response = create(credentials, content);
+        let mut response = create(&credentials, content);
         println!("{}", response.text().expect("response text fail"));
         println!("{}", response.status());
     } else if let Some(matches) = matches.subcommand_matches("update") {
@@ -189,8 +231,20 @@ fn main() {
         let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: version};
         let content = get_content(page);
 
-        let mut response = update(credentials, content, id);
+        let mut response = update(&credentials, content, id);
         println!("{}", response.text().expect("response text fail"));
         println!("{}", response.status());
+    } else if let Some(matches) = matches.subcommand_matches("search") {
+        let title = matches.value_of("title").unwrap();
+
+        let profile_name = matches.value_of("profile").unwrap();
+        let profile = get_profile(profile_name);
+
+        let password = get_password(profile.pass_secret.to_string());
+        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+
+        let page = search(&credentials, profile.space, title.to_string());
+
+        println!("title: {}, id: {}", page.title, page.id)
     }
 }
