@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate clap;
 extern crate dirs;
 extern crate reqwest;
@@ -138,6 +139,7 @@ fn search(credentials: &Credentials, space: String, title: String) -> Confluence
 
 fn main() {
     let matches = App::new("meh")
+        .version(crate_version!())
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommand(SubCommand::with_name("create")
             .about("create a page")
