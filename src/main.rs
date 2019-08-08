@@ -37,9 +37,15 @@ struct Profile {
 }
 
 #[derive(Deserialize, Clone)]
+struct Version {
+    number: u32,
+}
+
+#[derive(Deserialize, Clone)]
 struct ConfluencePage {
     id: String,
     title: String,
+    version: Version,
 }
 
 #[derive(Deserialize)]
@@ -118,8 +124,8 @@ fn update(credentials: &Credentials, content: String, id: u64) -> reqwest::Respo
 }
 
 fn search(credentials: &Credentials, space: String, title: String) -> ConfluencePage {
-    let endpoint = format!("{endpoint}?spaceKey={space}&title={title}", endpoint=get_endpoint(credentials),
-        space=space, title=title);
+    let endpoint = format!("{endpoint}?spaceKey={space}&title={title}&expand=version",
+        endpoint=get_endpoint(credentials), space=space, title=title);
     let client = reqwest::Client::new();
     let mut response = client.get(endpoint.as_str())
         .basic_auth(&credentials.username, Some(&credentials.password))
@@ -245,6 +251,6 @@ fn main() {
 
         let page = search(&credentials, profile.space, title.to_string());
 
-        println!("title: {}, id: {}", page.title, page.id)
+        println!("title: {}, id: {}, version: {}", page.title, page.id, page.version.number)
     }
 }
