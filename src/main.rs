@@ -137,6 +137,16 @@ fn search(credentials: &Credentials, space: String, title: String) -> Confluence
     first_result.clone()
 }
 
+fn get(credentials: &Credentials, id: String) -> String {
+    let endpoint = format!("{endpoint}/{id}?expand=body.styled_view", endpoint=get_endpoint(credentials), id=id);
+    let client = reqwest::Client::new();
+    let mut response = client.get(endpoint.as_str())
+        .basic_auth(&credentials.username, Some(&credentials.password))
+        .send()
+        .expect("get by id fail");
+    response.text().expect("get response fail")
+}
+
 fn main() {
     let matches = App::new("meh")
         .version(crate_version!())
@@ -207,6 +217,20 @@ fn main() {
                 .help("title for the page to create")
                 .takes_value(true)
                 .required(true)))
+        .subcommand(SubCommand::with_name("get")
+            .about("search for a page")
+            .arg(Arg::with_name("profile")
+                .short("p")
+                .long("profile")
+                .help("a profile name")
+                .takes_value(true)
+                .default_value(&DEFAULT_PROFILE))
+            .arg(Arg::with_name("id")
+                .short("i")
+                .long("id")
+                .help("id of the page to get")
+                .takes_value(true)
+                .required(true)))
         .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("create") {
@@ -254,5 +278,17 @@ fn main() {
         let page = search(&credentials, profile.space, title.to_string());
 
         println!("title: {}, id: {}, version: {}", page.title, page.id, page.version.number)
+    } else if let Some(matches) = matches.subcommand_matches("get") {
+        let id = matches.value_of("id").unwrap();
+
+        let profile_name = matches.value_of("profile").unwrap();
+        let profile = get_profile(profile_name);
+
+        let password = get_password(profile.pass_secret.to_string());
+        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+
+        let page = get(&credentials, id.to_string());
+
+        println!("{}", page);
     }
 }
