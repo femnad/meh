@@ -132,6 +132,9 @@ fn search(credentials: &Credentials, space: String, title: String) -> Confluence
         .basic_auth(&credentials.username, Some(&credentials.password))
         .send()
         .expect("search by title and space fail");
+    if !response.status().is_success() {
+        panic!("Unexpected response status: {}", response.status())
+    }
     let search_results: SearchResults = response.json().expect("cannot extract JSON");
     let first_result = &search_results.results[0];
     first_result.clone()
