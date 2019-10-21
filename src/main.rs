@@ -136,6 +136,9 @@ fn search(credentials: &Credentials, space: String, title: String) -> Confluence
         panic!("Unexpected response status: {}", response.status())
     }
     let search_results: SearchResults = response.json().expect("cannot extract JSON");
+    if search_results.results.len() == 0 {
+        panic!("No page found with title {}", title);
+    }
     let first_result = &search_results.results[0];
     first_result.clone()
 }
