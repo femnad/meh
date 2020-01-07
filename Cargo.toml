@@ -1,6 +1,6 @@
 [package]
 name = "meh"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["commit-person <commit-person@localhost>"]
 edition = "2018"
 
