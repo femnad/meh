@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate clap;
 extern crate dirs;
-extern crate reqwest;
 extern crate serde;
 
 use std::process::Command;
@@ -11,6 +10,8 @@ use std::fs::File;
 use clap::{App, Arg, SubCommand, AppSettings};
 use serde_json::json;
 use serde::Deserialize;
+
+mod confluence;
 
 const DEFAULT_PROFILE: &str = "default";
 const PROFILE_FILE_SUFFIX: &str = "meh/meh.yaml";
@@ -22,12 +23,6 @@ struct Page {
     version: u32,
 }
 
-struct Credentials {
-    username: String,
-    password: String,
-    endpoint: String,
-}
-
 #[derive(Deserialize)]
 struct Profile {
     name: String,
@@ -35,23 +30,6 @@ struct Profile {
     pass_secret: String,
     endpoint: String,
     space: String,
-}
-
-#[derive(Deserialize, Clone)]
-struct Version {
-    number: u32,
-}
-
-#[derive(Deserialize, Clone)]
-struct ConfluencePage {
-    id: String,
-    title: String,
-    version: Version,
-}
-
-#[derive(Deserialize)]
-struct SearchResults {
-    results: Vec<ConfluencePage>
 }
 
 fn get_profile(profile_name: &str) -> Profile {
@@ -99,59 +77,6 @@ fn get_password(secret_name: String) -> String {
     v[0].to_string()
 }
 
-fn get_endpoint(credentials: &Credentials) -> String {
-    format!("{}/{}", credentials.endpoint, "confluence/rest/api/content")
-}
-
-fn create(credentials: &Credentials, content: String) -> reqwest::Response {
-    let client = reqwest::Client::new();
-    client.post(get_endpoint(credentials).as_str())
-        .basic_auth(&credentials.username, Some(&credentials.password))
-        .body(content)
-        .header("Content-Type", "application/json")
-        .send()
-        .expect("post fail")
-}
-
-fn update(credentials: &Credentials, content: String, id: u64) -> reqwest::Response {
-    let endpoint = format!("{}/{}", get_endpoint(credentials), id);
-    let client = reqwest::Client::new();
-    client.put(endpoint.as_str())
-        .basic_auth(&credentials.username, Some(&credentials.password))
-        .body(content)
-        .header("Content-Type", "application/json")
-        .send()
-        .expect("post fail")
-}
-
-fn search(credentials: &Credentials, space: String, title: String) -> ConfluencePage {
-    let endpoint = format!("{endpoint}?spaceKey={space}&title={title}&expand=version",
-        endpoint=get_endpoint(credentials), space=space, title=title);
-    let client = reqwest::Client::new();
-    let mut response = client.get(endpoint.as_str())
-        .basic_auth(&credentials.username, Some(&credentials.password))
-        .send()
-        .expect("search by title and space fail");
-    if !response.status().is_success() {
-        panic!("Unexpected response status: {}", response.status())
-    }
-    let search_results: SearchResults = response.json().expect("cannot extract JSON");
-    if search_results.results.len() == 0 {
-        panic!("No page found with title {}", title);
-    }
-    let first_result = &search_results.results[0];
-    first_result.clone()
-}
-
-fn get(credentials: &Credentials, id: String) -> String {
-    let endpoint = format!("{endpoint}/{id}?expand=body.styled_view", endpoint=get_endpoint(credentials), id=id);
-    let client = reqwest::Client::new();
-    let mut response = client.get(endpoint.as_str())
-        .basic_auth(&credentials.username, Some(&credentials.password))
-        .send()
-        .expect("get by id fail");
-    response.text().expect("get response fail")
-}
 
 fn main() {
     let matches = App::new("meh")
@@ -247,13 +172,15 @@ fn main() {
         let profile = get_profile(profile_name);
 
         let password = get_password(profile.pass_secret.to_string());
-        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
         let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: 1};
         let content = get_content(page);
 
-        let mut response = create(&credentials, content);
-        println!("{}", response.text().expect("response text fail"));
-        println!("{}", response.status());
+        let result = confluence::create(&credentials, content);
+        match result {
+            Ok(()) => println!("create success"),
+            Err(()) => println!("create fail"),
+        }
     } else if let Some(matches) = matches.subcommand_matches("update") {
         let title = matches.value_of("title").unwrap();
         let source = matches.value_of("source").unwrap();
@@ -265,13 +192,15 @@ fn main() {
         let id: u64 = matches.value_of("id").unwrap().parse().expect("failed parsing int");
 
         let password = get_password(profile.pass_secret.to_string());
-        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
         let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: version};
         let content = get_content(page);
 
-        let mut response = update(&credentials, content, id);
-        println!("{}", response.text().expect("response text fail"));
-        println!("{}", response.status());
+        let response = confluence::update(&credentials, content, id);
+        match response {
+            Ok(()) => println!("update success"),
+            Err(text) => println!("update fail {}", text),
+        }
     } else if let Some(matches) = matches.subcommand_matches("search") {
         let title = matches.value_of("title").unwrap();
 
@@ -279,11 +208,15 @@ fn main() {
         let profile = get_profile(profile_name);
 
         let password = get_password(profile.pass_secret.to_string());
-        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
 
-        let page = search(&credentials, profile.space, title.to_string());
+        let response = confluence::search(&credentials, profile.space, title.to_string());
+        match response {
+            Ok(page) => println!("title: {}, id: {}, version: {}", page.title, page.id,
+                                 page.version.number),
+            Err(text) => println!("search fail {}", text),
+        }
 
-        println!("title: {}, id: {}, version: {}", page.title, page.id, page.version.number)
     } else if let Some(matches) = matches.subcommand_matches("get") {
         let id = matches.value_of("id").unwrap();
 
@@ -291,9 +224,9 @@ fn main() {
         let profile = get_profile(profile_name);
 
         let password = get_password(profile.pass_secret.to_string());
-        let credentials = Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
 
-        let page = get(&credentials, id.to_string());
+        let page = confluence::get(&credentials, id.to_string());
 
         println!("{}", page);
     }
