@@ -2,6 +2,7 @@ extern crate serde;
 extern crate attohttpc;
 
 use serde::Deserialize;
+use serde_json::value::Value;
 
 pub struct Credentials {
     pub username: String,
@@ -36,7 +37,7 @@ pub fn get_endpoint(credentials: &Credentials) -> String {
     format!("{}/{}", credentials.endpoint, "confluence/rest/api/content")
 }
 
-pub fn update(credentials: &Credentials, content: String, id: String) -> Result<(), String> {
+pub fn update(credentials: &Credentials, content: Value, id: String) -> Result<(), String> {
     let endpoint = format!("{}/{}", get_endpoint(credentials), id);
     let response = attohttpc::put(endpoint)
         .basic_auth(&credentials.username, Option::Some(credentials.password.clone()))
@@ -53,7 +54,7 @@ pub fn update(credentials: &Credentials, content: String, id: String) -> Result<
     return Ok(())
 }
 
-pub fn create(credentials: &Credentials, content: String) -> Result<(), String> {
+pub fn create(credentials: &Credentials, content: Value) -> Result<(), String> {
     let endpoint = format!("{}", get_endpoint(credentials));
     let response = attohttpc::post(endpoint)
         .basic_auth(&credentials.username, Some(&credentials.password))

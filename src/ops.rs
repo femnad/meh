@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use crate::confluence;
 use serde_json::json;
+use serde_json::value::Value;
 
 struct Content {
     title: String,
@@ -11,7 +12,7 @@ struct Content {
     version: u32,
 }
 
-fn get_content(content: Content) -> String {
+fn get_content(content: Content) -> Value {
     let mut file = File::open(content.source_file).expect("unable to open file");
     let mut page_body = String::new();
     file.read_to_string(&mut page_body).expect("unable to read file");
@@ -31,10 +32,10 @@ fn get_content(content: Content) -> String {
             }
         }
     });
-    content.to_string()
+    content
 }
 
-fn get_update_content(current_page: confluence::ConfluencePage, source_file: String) -> String {
+fn get_update_content(current_page: confluence::ConfluencePage, source_file: String) -> Value {
     let content = Content{title: current_page.title, space: current_page.space.key, source_file: source_file, version: current_page.version.number + 1};
     get_content(content)
 }
