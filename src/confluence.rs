@@ -21,7 +21,7 @@ pub struct Space {
 
 #[derive(Clone, Deserialize)]
 pub struct ConfluencePage {
-    pub id: u64,
+    pub id: String,
     pub title: String,
     pub version: Version,
     pub space: Space,
@@ -36,10 +36,11 @@ pub fn get_endpoint(credentials: &Credentials) -> String {
     format!("{}/{}", credentials.endpoint, "confluence/rest/api/content")
 }
 
-pub fn update(credentials: &Credentials, content: String, id: u64) -> Result<(), String> {
+pub fn update(credentials: &Credentials, content: String, id: String) -> Result<(), String> {
     let endpoint = format!("{}/{}", get_endpoint(credentials), id);
     let response = attohttpc::put(endpoint)
         .basic_auth(&credentials.username, Option::Some(credentials.password.clone()))
+        .header("Content-Type", "application/json")
         .json(&content)
         .expect("Error building put request")
         .send()
@@ -67,7 +68,7 @@ pub fn create(credentials: &Credentials, content: String) -> Result<(), String> 
 }
 
 pub fn search(credentials: &Credentials, space: String, title: String) -> Result<ConfluencePage, String> {
-    let endpoint = format!("{endpoint}?spaceKey={space}&title={title}&expand=version",
+    let endpoint = format!("{endpoint}?spaceKey={space}&title={title}&expand=version,space",
                            endpoint=get_endpoint(credentials), space=space, title=title);
     let response = attohttpc::get(endpoint)
         .basic_auth(&credentials.username, Some(&credentials.password))
