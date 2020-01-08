@@ -29,6 +29,23 @@ pub struct ConfluencePage {
 }
 
 #[derive(Deserialize)]
+pub struct View {
+    pub value: String
+}
+
+#[derive(Deserialize)]
+pub struct Body {
+    pub view: View
+}
+
+#[derive(Deserialize)]
+pub struct ContentView {
+    pub id: String,
+    pub title: String,
+    pub body: Body
+}
+
+#[derive(Deserialize)]
 struct SearchResults {
     results: Vec<ConfluencePage>
 }
@@ -87,11 +104,15 @@ pub fn search(credentials: &Credentials, space: String, title: String) -> Result
     Ok(first_result.clone())
 }
 
-pub fn get(credentials: &Credentials, id: String) -> String {
-    let endpoint = format!("{endpoint}/{id}?expand=body.styled_view", endpoint=get_endpoint(credentials), id=id);
+pub fn get(credentials: &Credentials, id: String) -> Result<ContentView, String> {
+    let endpoint = format!("{endpoint}/{id}?expand=body.view", endpoint=get_endpoint(credentials), id=id);
     let response = attohttpc::get(endpoint.as_str())
         .basic_auth(&credentials.username, Some(&credentials.password))
         .send()
         .expect("get by id fail");
-    response.text().expect("get response fail")
+    if !response.is_success() {
+        return Err(response.text().expect("error getting response text"))
+    }
+    let content_view: ContentView = response.json().expect("error getting response as json");
+    return Ok(content_view)
 }

@@ -116,10 +116,10 @@ fn main() {
                 .help("a profile name")
                 .takes_value(true)
                 .default_value(&DEFAULT_PROFILE))
-            .arg(Arg::with_name("id")
-                .short("i")
-                .long("id")
-                .help("id of the page to get")
+            .arg(Arg::with_name("title")
+                .short("t")
+                .long("title")
+                .help("title of the page to get")
                 .takes_value(true)
                 .required(true)))
         .get_matches();
@@ -171,7 +171,7 @@ fn main() {
         }
 
     } else if let Some(matches) = matches.subcommand_matches("get") {
-        let id = matches.value_of("id").unwrap();
+        let title = matches.value_of("title").unwrap();
 
         let profile_name = matches.value_of("profile").unwrap();
         let profile = get_profile(profile_name);
@@ -179,8 +179,10 @@ fn main() {
         let password = get_password(profile.pass_secret.to_string());
         let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
 
-        let page = confluence::get(&credentials, id.to_string());
-
-        println!("{}", page);
+        let lookup = ops::get(&credentials, title.to_string(), profile.space);
+        match lookup {
+            Ok(content_view) => println!("{}", content_view.body.view.value),
+            Err(text) => println!("get fail {}", text),
+        }
     }
 }

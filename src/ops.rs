@@ -59,3 +59,12 @@ pub fn create(credentials: &confluence::Credentials, title: String, space: Strin
     confluence::create(&credentials, content)
 }
 
+pub fn get(credentials: &confluence::Credentials, title: String, space: String) -> Result<confluence::ContentView, String> {
+    let result = confluence::search(credentials, space, title);
+    match result {
+        Ok(page) => {
+            confluence::get(&credentials, page.id)
+        },
+        Err(reason) => return Err(reason)
+    }
+}
