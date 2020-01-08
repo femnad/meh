@@ -15,10 +15,16 @@ pub struct Version {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct Space {
+    pub key: String
+}
+
+#[derive(Clone, Deserialize)]
 pub struct ConfluencePage {
-    pub id: String,
+    pub id: u64,
     pub title: String,
     pub version: Version,
+    pub space: Space,
 }
 
 #[derive(Deserialize)]
@@ -46,7 +52,7 @@ pub fn update(credentials: &Credentials, content: String, id: u64) -> Result<(),
     return Ok(())
 }
 
-pub fn create(credentials: &Credentials, content: String) -> Result<(), ()> {
+pub fn create(credentials: &Credentials, content: String) -> Result<(), String> {
     let endpoint = format!("{}", get_endpoint(credentials));
     let response = attohttpc::post(endpoint)
         .basic_auth(&credentials.username, Some(&credentials.password))
@@ -57,7 +63,7 @@ pub fn create(credentials: &Credentials, content: String) -> Result<(), ()> {
     if response.is_success() {
         return Ok(())
     }
-    Err(())
+    Err(response.text().expect("Error getting response"))
 }
 
 pub fn search(credentials: &Credentials, space: String, title: String) -> Result<ConfluencePage, String> {

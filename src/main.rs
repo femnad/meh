@@ -8,20 +8,14 @@ use std::io::prelude::*;
 use std::fs::File;
 
 use clap::{App, Arg, SubCommand, AppSettings};
-use serde_json::json;
 use serde::Deserialize;
 
 mod confluence;
+mod ops;
 
 const DEFAULT_PROFILE: &str = "default";
 const PROFILE_FILE_SUFFIX: &str = "meh/meh.yaml";
 
-struct Page {
-    title: String,
-    space: String,
-    source_file: String,
-    version: u32,
-}
 
 #[derive(Deserialize)]
 struct Profile {
@@ -44,28 +38,6 @@ fn get_profile(profile_name: &str) -> Profile {
         .expect("Cannot find desired profile")
 }
 
-fn get_content(page: Page) -> String {
-    let mut file = File::open(page.source_file).expect("unable to open file");
-    let mut page_body = String::new();
-    file.read_to_string(&mut page_body).expect("unable to read file");
-    let content = json!({
-        "version": {
-            "number": page.version 
-        },
-        "type": "page",
-        "space": {
-            "key": page.space
-        },
-        "title": page.title,
-        "body": {
-            "storage": {
-                "value": page_body,
-                "representation": "wiki"
-            }
-        }
-    });
-    content.to_string()
-}
 
 fn get_password(secret_name: String) -> String {
     let output = Command::new("pass")
@@ -121,18 +93,6 @@ fn main() {
                 .long("source")
                 .help("source file for the page")
                 .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("id")
-                .short("i")
-                .long("id")
-                .help("ID for the page to update")
-                .takes_value(true)
-                .required(true))
-            .arg(Arg::with_name("version")
-                .short("v")
-                .long("version")
-                .help("version to set for the updated page")
-                .takes_value(true)
                 .required(true)))
         .subcommand(SubCommand::with_name("search")
             .about("search for a page")
@@ -173,31 +133,24 @@ fn main() {
 
         let password = get_password(profile.pass_secret.to_string());
         let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
-        let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: 1};
-        let content = get_content(page);
 
-        let result = confluence::create(&credentials, content);
+        let result = ops::create(&credentials, title.to_string(), profile.space, source.to_string());
+
         match result {
             Ok(()) => println!("create success"),
-            Err(()) => println!("create fail"),
-        }
+            Err(err) => println!("create fail {}", err),
+        };
     } else if let Some(matches) = matches.subcommand_matches("update") {
         let title = matches.value_of("title").unwrap();
         let source = matches.value_of("source").unwrap();
 
         let profile_name = matches.value_of("profile").unwrap();
         let profile = get_profile(profile_name);
-
-        let version: u32 = matches.value_of("version").unwrap().parse().expect("failed parsing int");
-        let id: u64 = matches.value_of("id").unwrap().parse().expect("failed parsing int");
-
         let password = get_password(profile.pass_secret.to_string());
         let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
-        let page = Page{title: title.to_string(), space: profile.space, source_file: source.to_string(), version: version};
-        let content = get_content(page);
 
-        let response = confluence::update(&credentials, content, id);
-        match response {
+        let result = ops::update(&credentials, profile.space, title.to_string(),  source.to_string());
+        match result {
             Ok(()) => println!("update success"),
             Err(text) => println!("update fail {}", text),
         }
