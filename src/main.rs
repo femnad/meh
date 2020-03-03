@@ -73,7 +73,11 @@ fn main() {
                 .long("source")
                 .help("source file for the page")
                 .takes_value(true)
-                .required(true)))
+                .required(true))
+            .arg(Arg::with_name("parent")
+                .short("P")
+                .long("parent")
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("update")
             .about("update a page")
             .arg(Arg::with_name("profile")
@@ -131,10 +135,12 @@ fn main() {
         let profile_name = matches.value_of("profile").unwrap();
         let profile = get_profile(profile_name);
 
-        let password = get_password(profile.pass_secret.to_string());
-        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let parent = matches.value_of("parent");
 
-        let result = ops::create(&credentials, title.to_string(), profile.space, source.to_string());
+        let password = get_password(profile.pass_secret.to_string());
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password, endpoint: profile.endpoint};
+
+        let result = ops::create(&credentials, title.to_string(), profile.space, source.to_string(), parent);
 
         match result {
             Ok(()) => println!("create success"),
@@ -147,7 +153,7 @@ fn main() {
         let profile_name = matches.value_of("profile").unwrap();
         let profile = get_profile(profile_name);
         let password = get_password(profile.pass_secret.to_string());
-        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password, endpoint: profile.endpoint};
 
         let result = ops::update(&credentials, profile.space, title.to_string(),  source.to_string());
         match result {
@@ -161,9 +167,9 @@ fn main() {
         let profile = get_profile(profile_name);
 
         let password = get_password(profile.pass_secret.to_string());
-        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password, endpoint: profile.endpoint};
 
-        let response = confluence::search(&credentials, profile.space, title.to_string());
+        let response = confluence::search(&credentials, &profile.space, title.to_string());
         match response {
             Ok(page) => println!("title: {}, id: {}, version: {}", page.title, page.id,
                                  page.version.number),
@@ -177,7 +183,7 @@ fn main() {
         let profile = get_profile(profile_name);
 
         let password = get_password(profile.pass_secret.to_string());
-        let credentials = confluence::Credentials{username: profile.username.to_string(), password: password, endpoint: profile.endpoint};
+        let credentials = confluence::Credentials{username: profile.username.to_string(), password, endpoint: profile.endpoint};
 
         let lookup = ops::get(&credentials, title.to_string(), profile.space);
         match lookup {

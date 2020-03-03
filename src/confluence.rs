@@ -22,6 +22,7 @@ pub struct Space {
 
 #[derive(Clone, Deserialize)]
 pub struct ConfluencePage {
+    // search endpoint returns IDs as strings
     pub id: String,
     pub title: String,
     pub version: Version,
@@ -85,7 +86,7 @@ pub fn create(credentials: &Credentials, content: Value) -> Result<(), String> {
     Err(response.text().expect("Error getting response"))
 }
 
-pub fn search(credentials: &Credentials, space: String, title: String) -> Result<ConfluencePage, String> {
+pub fn search(credentials: &Credentials, space: &str, title: String) -> Result<ConfluencePage, String> {
     let endpoint = format!("{endpoint}?spaceKey={space}&title={title}&expand=version,space",
                            endpoint=get_endpoint(credentials), space=space, title=title);
     let response = attohttpc::get(endpoint)

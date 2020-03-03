@@ -1,0 +1,6 @@
+h1. Test Page
+
+h2. A Table
+
+|| Heading 1 || Heading 2 ||
+| Column1 | Column 2 |
